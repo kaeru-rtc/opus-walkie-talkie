@@ -13,6 +13,8 @@ export default class GetLocalStream extends Component {
 
     this.audio.onloadedmetadata = _ => {
       this.audio.play()
+
+      this.props.store.getPCMStream()
     }
   }
   render() {
@@ -22,7 +24,7 @@ export default class GetLocalStream extends Component {
         <Button type="primary" onClick={this.handleClickBtn}>start local stream</Button>
 
         <div>
-          <audio ref={ elem => this.audio = elem } controls />
+          <audio ref={ elem => this.audio = elem } muted controls />
         </div>
       </div>
     )

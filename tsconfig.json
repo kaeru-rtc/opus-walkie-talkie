@@ -21,6 +21,6 @@
     "noEmit": true
   },
   "include": [
-    "src"
+    "src", "public/wasm", "public/libopus.asm.js"
   ]
 }
