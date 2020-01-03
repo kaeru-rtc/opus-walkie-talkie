@@ -1,34 +1,12 @@
 import { observable, computed, action } from 'mobx'
-import { EventEmitter } from 'events'
-import { tsThisType } from '@babel/types'
 
-/**
- * convert array
- * 
- * @param {Int16Array} arr 
- * @return {Float32Array}
- */
-const convertI16toF32 = arr => {
-  const ret = new Float32Array(arr.length)
-  for( let i = 0; i < ret.length; i++ ) {
-    ret[i] = parseFloat( arr[i] / 65535 )
-  }
-  return ret
-}
-
-/**
- * convert array
- * 
- * @param {Float32Array} arr 
- * @return {Int16Array}
- */
-const convertF32toI16 = arr => {
-  const ret = new Int16Array(arr.length)
-  for( let i = 0; i < ret.length; i++ ) {
-    ret[i] = parseInt( arr[i] * 65535 )
-  }
-  return ret
-}
+import TempQueue from '../libs/temp-queue'
+import { 
+  Player,
+  PcmToOpus,
+  OpusToPcm,
+  convertI16toF32
+} from '../libs/util'
 
 
 
@@ -37,19 +15,29 @@ const convertF32toI16 = arr => {
 export default class TranceiverStore  {
   @observable stream // local media stream (voice)
   @observable ctx // audio context
-  @observable logging = true // handler for pcm logging in `onaudioprocess` of Web Audio API
 
-  @observable originalData = [] // original audio data (Int16Array, maybe)
-  @observable outData = [] // opus decoded data (Int16Array, maybe)
+  @observable sourcePcm
+  @observable opusFrames
+  // @observable decoded
+  @observable decodedFrames = []
+  @observable timeDecodeds = []
 
-  @observable pos = 0 // position of source audio
-  @observable ready = false
+  @computed get opusData() {
+    if( !this.opusFrames ) return null
 
-  @computed get target() {
-    const ret = []
-    this.originalData.length > 0 ? this.originalData.forEach( ( curr, idx ) => ret.push({
-      x: idx, y: curr
-    })): []
+    const dataLen = this.opusFrames.reduce( (prev, frame) => {
+      prev += frame.length
+      return prev
+    }, 0)
+
+    const ret = new Int16Array( dataLen )
+    let idx = 0
+
+    for( let frame of this.opusFrames ) {
+      for( let k = 0; k < frame.length; k++ ) {
+        ret[idx++] = frame[k]
+      }
+    }
 
     return ret
   }
@@ -63,74 +51,73 @@ export default class TranceiverStore  {
   }
 
   @action getPCMStream = async _ => {
-    this.ctx = new ( window.AudioContext || window.webkitAudioContext )({
-      sampleRate: 48000
+    // setup encoder and decoder 
+    const pcmToOpus = new PcmToOpus()
+    const opusToPcm = new OpusToPcm()
+
+    const player = new Player({
+      oscillatorFreq: 1024,
+      gain: 1
     })
+    player.start()
 
-    // initialize libopus encoder and decoder
-    const enc = new libopus.Encoder(1, 48000, 24000, 20, false)
-    const dec = new libopus.Decoder(1, 48000)
 
-    // this will be used when decoded opus data is ready to play.
-    const emitter = new EventEmitter()
+    const inputQueue = new TempQueue({size: 48000})
+    const outputQueue = new TempQueue({size: 4096})
 
-    // setup dummy white noise data in Int16Array (sampling rate is 48kHz)
-    // then, start encoding for it.
-    // const samples = new Int16Array(48000);
-    const samples = new Float32Array( 48000 )
-    const osamples = new Int16Array(48000)
+    const onOutputReady = data => {
+      // data is 960bytes...
+      this.decodedFrames.push( data )
+      this.timeDecodeds.push( Date.now() )
 
-    emitter.on('ready', _ => {
-      enc.input( convertF32toI16(samples) )
-      let encoded, decoded, p = 0
+      // data is Int16Array, we should convert it to Float32
+      const f32arr = convertI16toF32( data )
 
-      while( encoded = enc.output() ) {
-        dec.input( encoded )
+      outputQueue.add( f32arr, data => {
+        player.set( data )
+      })
+      // player.set( data )
+    }
 
-        while( decoded = dec.output() ) {
-          for( let k = 0; k < decoded.length; k++ ) {
-            osamples[p++] = decoded[k]
-          }
-        }
-      }
-      this.pos = 0
-      this.ready = true
-    })
+    let flag = true
 
-    const source = this.ctx.createMediaStreamSource( this.stream )
-    const scriptNode = this.ctx.createScriptProcessor(4096, 2, 2)
+    const onInputReady = data => {
+      // part - encode raw pcm to opus then generate frames
+      if( flag ) {
+        this.sourcePcm = data // MUST be Float32Array (source pcm data)
 
-    let sp = 0
-    scriptNode.onaudioprocess = ev => {
-      const inputBuffer = ev.inputBuffer
-      const outputBuffer = ev.outputBuffer
+        this.opusFrames = pcmToOpus.encode( data )
 
-      const inData = inputBuffer.getChannelData(0) // RAW PCM (Float32 stereo left) - typed arrray
-      for( let i = 0; i< inData.length; i++ ) {
-        samples[sp++] = inData[i]
-        if( sp > 48000) {
-          sp = 0
-          emitter.emit('ready')
-        }
-      }
-      
+        // part - decode each opus frames
+        // when it gets specified data size of pcm, it will fire
+        // 'data:ready', you can see the example below
+        opusToPcm.decode( this.opusFrames, onOutputReady )
 
-      
-
-      if( this.ready ) {
-        const _samples = convertI16toF32(osamples) // use Float32Array not Int16Array for playing
-        const out = outputBuffer.getChannelData(0)
-
-        for( let i = 0; i < out.length; i++ ) {
-          this.pos = ++this.pos % 48000
-
-          outputBuffer.getChannelData(0)[i] = _samples[this.pos] // just debug
-          outputBuffer.getChannelData(1)[i] = _samples[this.pos] // just debug
-        }
+        flag = false // fixme
       }
     }
 
-    source.connect( scriptNode )
+    ///////////////////////////////////////////////////////
+    // PART:: handle local stream as a source
+    //
+    ///////////////////////////////////////////////////////
+    this.ctx = new ( window.AudioContext || window.webkitAudioContext )({
+      sampleRate: 48000
+    })
+    const oscillator = this.ctx.createOscillator()
+    oscillator.type = 'square' // for easy debug
+    const source = this.ctx.createMediaStreamSource( this.stream )
+    const scriptNode = this.ctx.createScriptProcessor(4096, 2, 2)
+
+    scriptNode.onaudioprocess = ev => {
+      // RAW PCM float32Array, we only care about channel0 only
+
+      inputQueue.add( ev.inputBuffer.getChannelData(0), onInputReady )
+    }
+
+    //source.connect( scriptNode )
+    oscillator.connect( scriptNode )
     scriptNode.connect( this.ctx.destination )
+    oscillator.start()
   }
 }
