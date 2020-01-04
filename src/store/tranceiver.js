@@ -76,25 +76,19 @@ export default class TranceiverStore  {
       outputQueue.add( f32arr, data => {
         player.set( data )
       })
-      // player.set( data )
     }
-
-    let flag = true
 
     const onInputReady = data => {
       // part - encode raw pcm to opus then generate frames
-      if( flag ) {
-        this.sourcePcm = data // MUST be Float32Array (source pcm data)
+      this.sourcePcm = data // MUST be Float32Array (source pcm data)
 
-        this.opusFrames = pcmToOpus.encode( data )
+      // return value is array of Int16Array (opus frames)
+      this.opusFrames = pcmToOpus.encode( data )
 
-        // part - decode each opus frames
-        // when it gets specified data size of pcm, it will fire
-        // 'data:ready', you can see the example below
-        opusToPcm.decode( this.opusFrames, onOutputReady )
-
-        flag = false // fixme
-      }
+      // part - decode each opus frames
+      // when it gets specified data size of pcm, it will fire
+      // 'data:ready', you can see the example below
+      opusToPcm.decode( this.opusFrames, onOutputReady )
     }
 
     ///////////////////////////////////////////////////////
