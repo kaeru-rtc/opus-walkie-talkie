@@ -1,25 +1,20 @@
 import React, { Component } from 'react'
-import { observer } from 'mobx-react'
+import PropTypes from 'prop-types'
 
-import { Card, Col, Row, Statistic, Typography } from 'antd'
+import { Card, Typography } from 'antd'
 const { Title } = Typography
 
-@observer
 export default class SimpleGraph extends Component {
   d = 20 // canvas 境界とグラフの間
   dt = 5 // text の padding
-  updated = false
-
-  state = {
-    points: [],
-    numPoints: 0
-  }
 
   constructor( props ) {
     super( props )
 
-    this.w = this.props.width || 1240
+    this.w = this.props.width || 1280
     this.h = this.props.height || 240
+
+    this.type = this.props.type || 'line' // or 'bar'
   }
 
   componentDidMount() {
@@ -27,90 +22,30 @@ export default class SimpleGraph extends Component {
     this.canvas.height = this.h
     
     this.ctx = this.canvas.getContext('2d')
-
-    this.drawChart()
+    this.ctx.clearRect(0, 0, this.w, this.h )
   }
 
-  componentDidUpdate() {
-    this.drawChart()
+  updateChart() {
+    if( !this.ctx ) return
+
+    const points = this.getPoints(this.props.data)
+
+    this.ctx.clearRect( 0, 0, this.w, this.h )
+    this.drawAxis()
+    this.drawText()
+    this.drawPoints( points )
   }
 
-
-
-  drawChart() {
-    // note: to avoid multiple call of `setState`,
-    // the condition below is needed.
-    if( this.props.data && this.state.points.length === 0) {
-      const points = this.getPoints()
-      const numPoints = this.props.data
-        ? this.props.data.length : 0
-
-      this.setState({
-        points, numPoints
-      })
-
-
-      this.drawPoints( points )
-
-      this.drawBorder()
-      this.drawText()
-
-      this.updated = true
-    }
-  }
-
-  drawBorder() {
+  drawAxis() {
     if( this.ctx ) {
-      this.ctx.beginPath()
       this.ctx.lineWidth = 1
-      this.ctx.strokeStyle = '#666'
+
+      // x-axis and y-axis
+      this.ctx.strokeStyle = '#000'
+      this.ctx.beginPath()
       this.ctx.moveTo( this.d, 0 )
       this.ctx.lineTo( this.d, this.h - this.d)
       this.ctx.lineTo( this.w - this.d, this.h - this.d)
-      this.ctx.stroke()
-
-      this.ctx.beginPath()
-      this.ctx.setLineDash([10, 2, 10, 2])
-      this.ctx.moveTo( this.d, (this.h - this.d) / 2 )
-      this.ctx.lineTo( this.w - this.d, ( this.h - this.d ) / 2)
-      this.ctx.stroke()
-    }
-  }
-
-  getPoints() {
-    if( !this.props.data ) return []
-
-    const { min, max, maxLen } = this.props
-    //const src = this.props.store[this.props.dataName]
-    const src = this.props.data
-    const values = src.values(), ret = []
-    const dx = ( this.w - this.d * 2 ) / ( maxLen || src.length )
-    const dy = ( this.h - this.d ) / ( max - min )
-
-    let idx = 0
-
-    for( let v of values ) {
-      if( idx >= ( maxLen || src.length )) break
-
-      ret.push({
-        x: this.d + dx * idx++,
-        y: ( max - v ) * dy
-      })
-    }
-    return ret
-  }
-
-  drawPoints( points ) {
-    if( this.ctx ) {
-      this.ctx.lineWidth = 1
-      this.ctx.strokeStyle = '#f33'
-      points.forEach( (p, idx) => {
-        if( idx === 0 ) {
-          this.ctx.moveTo( p.x, p.y )
-        } else {
-          this.ctx.lineTo( p.x, p.y )
-        }
-      })
       this.ctx.stroke()
     }
   }
@@ -125,30 +60,62 @@ export default class SimpleGraph extends Component {
     }
   }
 
+  getPoints( data ) {
+    if( !data ) return []
+
+    const { min, max } = this.props
+    const ret = []
+    const dx = ( this.w - this.d * 2 ) / data.length
+    const dy = ( this.h - this.d ) / ( max - min )
+
+    for( let i = 0; i < data.length; i++ ) {
+      ret.push({
+        x: this.d + dx * i,
+        y: ( max - data[i] ) * dy
+      })
+    }
+    return ret
+  }
+
+  drawPoints( points ) {
+    if( this.ctx ) {
+      if( this.type === 'line') {
+        this.ctx.lineWidth = 1
+        this.ctx.strokeStyle = '#666'
+        points.forEach( (p, idx) => {
+          if( idx === 0 ) {
+            this.ctx.moveTo( p.x, p.y )
+          } else {
+            this.ctx.lineTo( p.x, p.y )
+          }
+        })
+        this.ctx.stroke()
+      } else {
+        const w = ( this.w - this.d ) / points.length
+        points.forEach( p => {
+          const h = this.h - this.d - p.y
+          this.ctx.fillRect( p.x, p.y, w, h)
+        })
+      }
+    }
+  }
+
 
   render() {
-    const decodedAt = this.props.timeDecoded ?
-      new Date(this.props.timeDecoded).toISOString() :
-      'N/A'
+    this.updateChart()
     return (
       <div className="SimpleGraph">
         <Card title={<Title level={2}>{this.props.title}</Title>}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Statistic title="num of total points" value={this.state.numPoints} />
-            </Col>
-            <Col span={12}>
-              <Statistic title="num of points displayed" value={this.state.points.length} />
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Statistic title="decoded at" value={decodedAt} />
-            </Col>
-          </Row>
           <canvas ref={elem => this.canvas = elem}></canvas>
         </Card>
       </div>
     )
   }
+}
+
+SimpleGraph.propTypes = {
+  min: PropTypes.number.isRequired, // グラフの最小値
+  max: PropTypes.number.isRequired, // グラフの最大値
+  width:  PropTypes.number, // グラフの幅
+  height: PropTypes.number  // フラフの高さ
 }
