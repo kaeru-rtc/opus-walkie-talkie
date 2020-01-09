@@ -1,18 +1,16 @@
-import TempQueuer from './temp-queue'
+import CircularBuffer from 'circular-buffer'
 
-export default class AudioSource {
+export default class AudioDestination {
   constructor( props ) {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)()
     this.props = Object.assign( {},
       { 
-        frequency: 1024,
         gain: 1,
         fft_size: 4096,
-        type: 'sine' // square, sawtooth, triangle, custom
         // see https://developer.mozilla.org/en-US/docs/Web/API/OscillatorNode/type
       }, props)
 
-    this.queue = new TempQueuer( { size: 48000 })
+    this.buffer = new CircularBuffer( 10 )
   }
 
   /**
@@ -20,10 +18,8 @@ export default class AudioSource {
    * @param {function} analyzerCallback 
    * @param {function} pcmCallback 
    */
-  start( analyzerCallback, pcmCallback ) {
+  start( analyzerCallback ) {
     this.oscillator = this.ctx.createOscillator()
-    this.oscillator.type = this.props.type
-    this.oscillator.frequency.value = this.props.frequency
 
     this.gainNode = this.ctx.createGain()
     this.gainNode.gain.value = this.props.gain
@@ -42,13 +38,14 @@ export default class AudioSource {
     this.oscillator.start()
 
     this.processor.onaudioprocess = ev => {
-      const inputBuffer  = ev.inputBuffer.getChannelData(0)
-      const outputBuffer = ev.outputBuffer.getChannelData(0)
+      if( this.buffer.size() > 0 ) {
+        const out = this.buffer.deq()
+        const outputBuffer = ev.outputBuffer.getChannelData(0)
 
-      for( let i = 0; i < inputBuffer.length; i++ ) {
-        outputBuffer[i] = inputBuffer[i]
+        for( let i = 0; i < outputBuffer.length; i++ ) {
+          outputBuffer[i] = out[i]
+        }
       }
-      this.queue.add( inputBuffer, pcmCallback )
     }
 
     const update = _ => {
@@ -64,5 +61,9 @@ export default class AudioSource {
     }
 
     update()
+  }
+
+  enq( f32arr ) {
+    this.buffer.enq( f32arr )
   }
 }
