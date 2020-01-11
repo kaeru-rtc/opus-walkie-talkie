@@ -25,9 +25,9 @@ const destination = new AudioDestination()
 
 
 function mapStateToProps ( state ) {
-  const { pcm, fft, pcmBeforeOpus } = state
+  const { pcm, fft, pcmBeforeOpus, outPCM, outFFT } = state
   return { 
-    pcm, fft, pcmBeforeOpus
+    pcm, fft, pcmBeforeOpus, outPCM, outFFT
   }
 }
 

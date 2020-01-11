@@ -14,6 +14,7 @@ class Graphs extends Component {
       <div className="graphs">
         <Title level={1}>Graph components</Title>
         <Button type="primary" onClick={this.startAudioSource}>start audio source</Button><br />
+        <Title level={2}>source</Title>
         <Row gutter={16}>
           <Col span={12}>
             <SimpleGraph 
@@ -31,6 +32,7 @@ class Graphs extends Component {
             />
           </Col>
         </Row>
+        <Title level={2}>destination (after decoded)</Title>
         <Row gutter={16}>
           <Col span={12}>
             <SimpleGraph 

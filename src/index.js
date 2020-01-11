@@ -8,9 +8,9 @@ import { Provider } from 'react-redux'
 import * as serviceWorker from './serviceWorker';
 
 import logger from 'redux-logger'
-import reducer, { addCounter, TYPES } from './store/appStore'
+import reducer from './store/appStore'
 
-const store = createStore( reducer ) // , applyMiddleware(logger) )
+const store = createStore( reducer )// , applyMiddleware(logger) )
 
 // store.subscribe( () => console.log( store.getState() ))
 

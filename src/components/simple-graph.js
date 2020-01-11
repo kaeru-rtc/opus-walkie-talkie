@@ -30,6 +30,8 @@ export default class SimpleGraph extends Component {
 
     const points = this.getPoints(this.props.data)
 
+    if(!points) return
+
     this.ctx.clearRect( 0, 0, this.w, this.h )
     this.drawAxis()
     this.drawText()
@@ -61,7 +63,7 @@ export default class SimpleGraph extends Component {
   }
 
   getPoints( data ) {
-    if( !data ) return []
+    if( !data ) return null
 
     const { min, max } = this.props
     const ret = []
