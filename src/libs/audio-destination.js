@@ -1,7 +1,11 @@
 import CircularBuffer from 'circular-buffer'
 
-export default class AudioDestination {
+import { EventEmitter } from 'events'
+
+export default class AudioDestination extends EventEmitter {
   constructor( props ) {
+    super( props )
+
     this.ctx = new (window.AudioContext || window.webkitAudioContext)()
     this.props = Object.assign( {},
       { 
@@ -10,7 +14,7 @@ export default class AudioDestination {
         // see https://developer.mozilla.org/en-US/docs/Web/API/OscillatorNode/type
       }, props)
 
-    this.buffer = new CircularBuffer( 10 )
+    this.buffer = new CircularBuffer( 100 )
   }
 
   /**
@@ -38,6 +42,8 @@ export default class AudioDestination {
     this.oscillator.start()
 
     this.processor.onaudioprocess = ev => {
+      // emit sizeof circular buffer
+      this.emit('buffer:size', this.buffer.size() )
       if( this.buffer.size() > 0 ) {
         const out = this.buffer.deq()
         const outputBuffer = ev.outputBuffer.getChannelData(0)
@@ -56,6 +62,7 @@ export default class AudioDestination {
       this.analyzer.getByteFrequencyData( fftArray )
 
       if( typeof analyzerCallback === 'function' ) {
+        // todo - eventemitter
         analyzerCallback( { pcmArray, fftArray } )
       }
     }

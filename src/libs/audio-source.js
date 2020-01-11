@@ -59,6 +59,7 @@ export default class AudioSource {
       this.analyzer.getByteFrequencyData( fftArray )
 
       if( typeof analyzerCallback === 'function' ) {
+        // todo - eventemitter
         analyzerCallback( { pcmArray, fftArray } )
       }
     }

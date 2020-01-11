@@ -67,10 +67,12 @@ export default class SimpleGraph extends Component {
 
     const { min, max } = this.props
     const ret = []
-    const dx = ( this.w - this.d * 2 ) / data.length
+    const length = this.props.length || data.length
+    const dx = ( this.w - this.d * 2 ) / length
     const dy = ( this.h - this.d ) / ( max - min )
 
-    for( let i = 0; i < data.length; i++ ) {
+
+    for( let i = 0; i < length; i++ ) {
       ret.push({
         x: this.d + dx * i,
         y: ( max - data[i] ) * dy
